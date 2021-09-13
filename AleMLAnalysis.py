@@ -172,7 +172,7 @@ class AvaliaClassificacao:
                     str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                     valores = np.array([float(str_conv % v) for v in valores])
                 if(unit is not None):
-                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                    valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -208,7 +208,7 @@ class AvaliaClassificacao:
                     str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                     valores = np.array([float(str_conv % v) for v in valores])
                 if(unit is not None):
-                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]                
+                    valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])                
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -275,7 +275,7 @@ class AvaliaClassificacao:
                     str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                     valores = np.array([float(str_conv % v) for v in valores])
                 if(unit is not None):
-                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]  
+                    valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])  
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -359,6 +359,7 @@ class AvaliaDatasetsClassificacao:
                 y = dict_dfs[chave].loc[~flag_na, self.__col_alvo].values
                 
                 inds_ordenado, primeira_ocorrencia, qtds, qtd_unicos = indices_qtds(valores)
+                valores_unicos = valores[inds_ordenado][primeira_ocorrencia]
                 y_agrup = np.split(y[inds_ordenado], primeira_ocorrencia[1:])
                 
                 qtds1 = np.array([soma_vetor(v) for v in y_agrup])
@@ -372,15 +373,22 @@ class AvaliaDatasetsClassificacao:
                                                 p_corte = self.__p_corte, p01_corte = self.__p01_corte, p_ref = self.__p_ref) for i in range(qtd_unicos)])
                                                               
                 df = self.__distribuicoes_geral.info_distribuicao(col_ref)
-                df['QTD_0'] = df['QTD'] - qtds1
-                df['QTD_1'] = qtds1
-                df['Frac_0'] = 1 - probs1
-                df['Frac_1'] = probs1 
+                if('Valor' in list(df.columns)):
+                    if(df['Valor'].dtype in ['<M8[ns]', 'datetime64[ns]']):
+                        indices = df.index[df['Valor'].view('i8').isin(valores_unicos)]
+                    else:
+                        indices = df.index[df['Valor'].isin(valores_unicos)]
+                else:
+                    indices = valores_unicos
+                df['QTD_0'] = pd.Series(qtds - qtds1, index = indices)
+                df['QTD_1'] = pd.Series(qtds1, index = indices)
+                df['Frac_0'] = pd.Series(1 - probs1, index = indices)
+                df['Frac_1'] = pd.Series(probs1, index = indices)
                 if(self.__col_prob is not None):
-                    df['Soma_Prob'] = soma_prob
-                    df['Media_Prob'] = soma_prob/qtds
-                    df['Metricas'] = aletricas_vetor
-                    df = pd.concat([df, df['Metricas'].apply(lambda x: x.valor_metricas(estatisticas_globais = False))], axis = 1)
+                    df['Soma_Prob'] = pd.Series(soma_prob, index = indices)
+                    df['Media_Prob'] = pd.Series(soma_prob/qtds, index = indices)
+                    df['Metricas'] = pd.Series(aletricas_vetor, index = indices)
+                    df = pd.concat([df, df['Metricas'].dropna().apply(lambda x: x.valor_metricas(estatisticas_globais = False))], axis = 1)
                     df = df.drop('Metricas', axis = 1)
                 
                 dfs_metricas[chave] = df
@@ -601,7 +609,7 @@ class AvaliaDatasetsClassificacao:
                         str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                         valores = np.array([float(str_conv % v) for v in valores])
                     if(unit is not None):
-                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                        valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -657,7 +665,7 @@ class AvaliaDatasetsClassificacao:
                         str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                         valores = np.array([float(str_conv % v) for v in valores])
                     if(unit is not None):
-                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                        valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -712,7 +720,7 @@ class AvaliaDatasetsClassificacao:
                         str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                         valores = np.array([float(str_conv % v) for v in valores])
                     if(unit is not None):
-                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                        valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -888,7 +896,7 @@ class AvaliaRegressao:
                     str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                     valores = np.array([float(str_conv % v) for v in valores])
                 if(unit is not None):
-                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                    valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -924,7 +932,7 @@ class AvaliaRegressao:
                     str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                     valores = np.array([float(str_conv % v) for v in valores])
                 if(unit is not None):
-                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]                
+                    valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])                
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -991,7 +999,7 @@ class AvaliaRegressao:
                     str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                     valores = np.array([float(str_conv % v) for v in valores])
                 if(unit is not None):
-                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                    valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -1071,6 +1079,7 @@ class AvaliaDatasetsRegressao:
                 y = dict_dfs[chave].loc[~flag_na, self.__col_alvo].values
                 
                 inds_ordenado, primeira_ocorrencia, qtds, qtd_unicos = indices_qtds(valores)
+                valores_unicos = valores[inds_ordenado][primeira_ocorrencia]
                 y_agrup = np.split(y[inds_ordenado], primeira_ocorrencia[1:])
             
                 y_agrup = np.split(y[inds_ordenado], primeira_ocorrencia[1:])
@@ -1084,13 +1093,20 @@ class AvaliaDatasetsRegressao:
                                                y_ref = self.__y_ref, num_kendalltau = num_kendalltau) for i in range(qtd_unicos)])
                                                               
                 df = self.__distribuicoes_geral.info_distribuicao(col_ref)
-                df['Soma_Alvo'] = soma
-                df['Media_Alvo'] = soma/qtds
+                if('Valor' in list(df.columns)):
+                    if(df['Valor'].dtype in ['<M8[ns]', 'datetime64[ns]']):
+                        indices = df.index[df['Valor'].view('i8').isin(valores_unicos)]
+                    else:
+                        indices = df.index[df['Valor'].isin(valores_unicos)]
+                else:
+                    indices = valores_unicos
+                df['Soma_Alvo'] = pd.Series(soma, index = indices)
+                df['Media_Alvo'] = pd.Series(soma/qtds, index = indices)
                 if(self.__col_pred is not None):
-                    df['Soma_Pred'] = soma_pred
-                    df['Media_Pred'] = soma_pred/qtds
-                    df['Metricas'] = metricas_vetor
-                    df = pd.concat([df, df['Metricas'].apply(lambda x: x.valor_metricas(estatisticas_globais = False))], axis = 1)
+                    df['Soma_Pred'] = pd.Series(soma_pred, index = indices)
+                    df['Media_Pred'] = pd.Series(soma_pred/qtds, index = indices)
+                    df['Metricas'] = pd.Series(metricas_vetor, index = indices)
+                    df = pd.concat([df, df['Metricas'].dropna().apply(lambda x: x.valor_metricas(estatisticas_globais = False))], axis = 1)
                     df = df.drop('Metricas', axis = 1)
                 dfs_metricas[chave] = df
             self.__dict_dfs_metricas[col_ref] = dfs_metricas
@@ -1179,7 +1195,7 @@ class AvaliaDatasetsRegressao:
                         str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                         valores = np.array([float(str_conv % v) for v in valores])
                     if(unit is not None):
-                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                        valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -1235,7 +1251,7 @@ class AvaliaDatasetsRegressao:
                         str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                         valores = np.array([float(str_conv % v) for v in valores])
                     if(unit is not None):
-                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                        valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -1290,7 +1306,7 @@ class AvaliaDatasetsRegressao:
                         str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
                         valores = np.array([float(str_conv % v) for v in valores])
                     if(unit is not None):
-                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                        valores = np.array([np.datetime_as_string(v, unit = unit) for v in valores])
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
