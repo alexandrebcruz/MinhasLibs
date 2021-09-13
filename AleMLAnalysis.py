@@ -150,7 +150,8 @@ class AvaliaClassificacao:
         else:
             return df
     
-    def grafico_probabilidade_condicional(self, col_ref, ymax = 0, explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
+    def grafico_probabilidade_condicional(self, col_ref, ymax = 0, explicita_resto = False, rot = None, 
+                                          alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
         if(col_ref in self.__dict_qtds1.keys()):
             paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico
             #Plot a curva de probabilidade dada pelo Alvo e pela Prob do Classificador
@@ -167,6 +168,11 @@ class AvaliaClassificacao:
                 ig = self.__dict_ig[col_ref]
                 rg = self.__dict_rg[col_ref]
                 
+                if(alga_signif is not None):
+                    str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                    valores = np.array([float(str_conv % v) for v in valores])
+                if(unit is not None):
+                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -188,7 +194,8 @@ class AvaliaClassificacao:
                     plt.xticks(rotation = rot)
                 plt.show()
 
-    def grafico_metricas_condicionais(self, col_ref, metricas, ylim = [0, 0], explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
+    def grafico_metricas_condicionais(self, col_ref, metricas, ylim = [0, 0], explicita_resto = False, rot = None, 
+                                      alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
         if(col_ref in self.__dict_qtds1.keys()):
             paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico 
             #Plot a curva de métrica em função da coluna de referência
@@ -196,7 +203,12 @@ class AvaliaClassificacao:
                 fig, axs = plt.subplots(1, 1, figsize = figsize)
                 
                 df, valores = self.valor_metricas_condicionais(col_ref, retorna_valores = True, explicita_resto = explicita_resto)
-                    
+                
+                if(alga_signif is not None):
+                    str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                    valores = np.array([float(str_conv % v) for v in valores])
+                if(unit is not None):
+                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]                
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -215,7 +227,8 @@ class AvaliaClassificacao:
                     plt.xticks(rotation = rot)
                 plt.show()
                 
-    def barra_calor(self, col_ref, alpha_max = 1, sinal_cor = False, explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
+    def barra_calor(self, col_ref, alpha_max = 1, sinal_cor = False, explicita_resto = False, rot = None, 
+                    alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
         #Normaliza os valores para plotar em cor
         def normaliza_media(sinal_cor, media):
             minimo = np.min(media)
@@ -252,12 +265,17 @@ class AvaliaClassificacao:
                 fig, ax = plt.subplots(1, 1, figsize = figsize, constrained_layout = True)
             
                 df, valores = self.valor_metricas_condicionais(col_ref, retorna_valores = True, explicita_resto = explicita_resto)
-                    
+                                
                 if(self.__col_prob is not None):
                     media_prob = df['Media_Prob'].values
                 else:
                     media_prob = df['Frac_1'].values
                 
+                if(alga_signif is not None):
+                    str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                    valores = np.array([float(str_conv % v) for v in valores])
+                if(unit is not None):
+                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]  
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -289,20 +307,26 @@ class AvaliaDatasetsClassificacao:
         self.__col_alvo = col_alvo
         self.__col_prob = col_prob
         
+        if(col_prob is not None):
+            self.__num_div_prob = num_div_prob
+        
         self.__dict_avaliaclf = {}
         if(chave_treino in self.__chaves):
             avaliaclf_treino = AvaliaClassificacao(dict_dfs[chave_treino], col_alvo, col_prob, num_div_prob = num_div_prob, 
                                                    num_div = num_div, num_cat = num_cat, unit = unit)
             #Probabilidades de Corte para Avaliação de Tomada de Decisão
             probs_ig = avaliaclf_treino.metricas_gerais.valor_prob_ig()
-            p_corte = probs_ig['Prob_Corte']
-            p01_corte = [probs_ig['Prob0_Corte'], probs_ig['Prob1_Corte']]
-            p_ref = avaliaclf_treino.metricas_gerais.retorna_p_ref()
+            self.__p_corte = probs_ig['Prob_Corte']
+            self.__p01_corte = [probs_ig['Prob0_Corte'], probs_ig['Prob1_Corte']]
+            self.__p_ref = avaliaclf_treino.metricas_gerais.retorna_p_ref()
             self.__dict_avaliaclf[chave_treino] = avaliaclf_treino
         for chave in self.__chaves:
             if(chave != chave_treino):
-                self.__dict_avaliaclf[chave] = AvaliaClassificacao(dict_dfs[chave], col_alvo, col_prob, num_div_prob, p_corte, p01_corte, p_ref, 
+                self.__dict_avaliaclf[chave] = AvaliaClassificacao(dict_dfs[chave], col_alvo, col_prob, num_div_prob, self.__p_corte, self.__p01_corte, self.__p_ref, 
                                                                    num_div, num_cat, unit)
+                                                                   
+        self.__distribuicoes_geral = DistribuicoesDataset(pd.concat(list(dict_dfs.values())), num_div = num_div, num_cat = num_cat, unit = unit, autorun = False)
+        self.__dict_dfs_metricas = {}
         
     def avaliadores_individuais(self):
         return self.__dict_avaliaclf
@@ -310,6 +334,57 @@ class AvaliaDatasetsClassificacao:
     def calcula_metricas_condicionais(self, dict_dfs, col_ref = [], parametros_padrao = True, num_div_prob = None, num_div = 20, num_cat = 5, unit = None):
         for chave in self.__chaves:
             self.__dict_avaliaclf[chave].calcula_metricas_condicionais(dict_dfs[chave], col_ref, parametros_padrao, num_div_prob, num_div, num_cat, unit)
+            
+        colunas = self.__dict_avaliaclf[self.__chave_treino].distribuicoes.retorna_colunas_dataset()
+        #Transforma uma string única em uma lista
+        if(isinstance(col_ref, str)):
+            col_ref = [col_ref]
+        if(len(col_ref) != 0):
+            colunas = col_ref
+            
+        if(parametros_padrao):
+            num_div_prob = self.__num_div_prob
+            
+        for col_ref in colunas:
+            self.__distribuicoes_geral.trata_coluna(pd.concat(list(dict_dfs.values())), col_ref, parametros_padrao, num_div, num_cat, unit)
+            
+            dfs_metricas = {}
+            for chave in self.__chaves:
+                valores = self.__distribuicoes_geral.retorna_valores(dict_dfs[chave], col_ref)
+                flag_na = np.array(self.__dict_avaliaclf[chave].distribuicoes.retorna_flag_na(col_ref))
+                num_linhas = self.__dict_avaliaclf[chave].distribuicoes.retorna_shape_dataset()[0]
+                qtd_nao_nulo = num_linhas - self.__dict_avaliaclf[chave].distribuicoes.retorna_qtds_na(col_ref)
+                
+                valores = valores[~flag_na]
+                y = dict_dfs[chave].loc[~flag_na, self.__col_alvo].values
+                
+                inds_ordenado, primeira_ocorrencia, qtds, qtd_unicos = indices_qtds(valores)
+                y_agrup = np.split(y[inds_ordenado], primeira_ocorrencia[1:])
+                
+                qtds1 = np.array([soma_vetor(v) for v in y_agrup])
+                probs1 = qtds1/qtds
+                
+                if(self.__col_prob is not None):
+                    y_prob = dict_dfs[chave].loc[~flag_na, self.__col_prob].values
+                    y_prob_agrup = np.split(y_prob[inds_ordenado], primeira_ocorrencia[1:])
+                    soma_prob = np.array([soma_vetor(v) for v in y_prob_agrup])
+                    aletricas_vetor = np.array([AletricasClassificacao(y_agrup[i], y_prob_agrup[i], num_div = num_div_prob,
+                                                p_corte = self.__p_corte, p01_corte = self.__p01_corte, p_ref = self.__p_ref) for i in range(qtd_unicos)])
+                                                              
+                df = self.__distribuicoes_geral.info_distribuicao(col_ref)
+                df['QTD_0'] = df['QTD'] - qtds1
+                df['QTD_1'] = qtds1
+                df['Frac_0'] = 1 - probs1
+                df['Frac_1'] = probs1 
+                if(self.__col_prob is not None):
+                    df['Soma_Prob'] = soma_prob
+                    df['Media_Prob'] = soma_prob/qtds
+                    df['Metricas'] = aletricas_vetor
+                    df = pd.concat([df, df['Metricas'].apply(lambda x: x.valor_metricas(estatisticas_globais = False))], axis = 1)
+                    df = df.drop('Metricas', axis = 1)
+                
+                dfs_metricas[chave] = df
+            self.__dict_dfs_metricas[col_ref] = dfs_metricas
     
     def valor_metricas(self, estatisticas_globais = True, probs_corte = True, probs_condicionais = True, lifts = True):
         df = pd.DataFrame(self.__dict_avaliaclf[self.__chave_treino].metricas_gerais.valor_metricas(estatisticas_globais, probs_corte, probs_condicionais, lifts), columns = [self.__chave_treino])
@@ -455,6 +530,10 @@ class AvaliaDatasetsClassificacao:
             for chave in self.__chaves:
                 d[chave] = self.__dict_avaliaclf[chave].valor_metricas_condicionais(col_ref)
             return d
+            
+    def valor_metricas_condicionais_geral(self, col_ref):
+        if(col_ref in self.__dict_avaliaclf[self.__chave_treino].colunas_metricas_condicionais_calculadas()):
+            return self.__dict_dfs_metricas[col_ref]
     
     def grafico_distribuicao(self, col_ref = [], alpha = 0.5, bins = None, explicita_resto = False, rot = None, conv_str = False, ticks_chars = None, figsize = [6, 4]):
         colunas = self.__dict_avaliaclf[self.__chave_treino].distribuicoes.retorna_colunas_dataset()
@@ -490,7 +569,8 @@ class AvaliaDatasetsClassificacao:
                         plt.xticks(rotation = rot)
                     plt.show()
                 
-    def grafico_probabilidade_condicional(self, col_ref, ymax = 0, explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize_base = [6, 4]):
+    def grafico_probabilidade_condicional(self, col_ref, ymax = 0, explicita_resto = False, rot = None, 
+                                          alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize_base = [6, 4]):
         if(col_ref in self.__dict_avaliaclf[self.__chave_treino].colunas_metricas_condicionais_calculadas()):
             paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico
             #Plot a curva de probabilidade dada pelo Alvo e pela Prob do Classificador
@@ -517,6 +597,11 @@ class AvaliaDatasetsClassificacao:
                     else:
                         media_prob = None
                     
+                    if(alga_signif is not None):
+                        str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                        valores = np.array([float(str_conv % v) for v in valores])
+                    if(unit is not None):
+                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -547,7 +632,8 @@ class AvaliaDatasetsClassificacao:
                 plt.legend(handles = hlds, bbox_to_anchor = (1.05, 1), loc = 'upper left')
                 plt.show()
                 
-    def grafico_metricas_condicionais(self, col_ref, metricas, ylim = [0, 0], explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize_base = [6, 4]):
+    def grafico_metricas_condicionais(self, col_ref, metricas, ylim = [0, 0], explicita_resto = False, rot = None, 
+                                      alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize_base = [6, 4]):
         if(col_ref in self.__dict_avaliaclf[self.__chave_treino].colunas_metricas_condicionais_calculadas()):
             paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico
             with sns.axes_style("whitegrid"):
@@ -567,6 +653,11 @@ class AvaliaDatasetsClassificacao:
 
                     df, valores = self.__dict_avaliaclf[chave].valor_metricas_condicionais(col_ref, retorna_valores = True, explicita_resto = explicita_resto)
                     
+                    if(alga_signif is not None):
+                        str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                        valores = np.array([float(str_conv % v) for v in valores])
+                    if(unit is not None):
+                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -593,6 +684,53 @@ class AvaliaDatasetsClassificacao:
                     ax.set_title(chave)
                     j = j + 1
                 plt.legend(handles = hlds, bbox_to_anchor = (1.05, 1), loc = 'upper left')
+                plt.show()
+                
+    def grafico_metrica_condicional_geral(self, col_ref, metrica, ylim = [0, 0], explicita_resto = False, rot = None, 
+                                          alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
+        if(col_ref in self.__dict_avaliaclf[self.__chave_treino].colunas_metricas_condicionais_calculadas()):
+            paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico
+            with sns.axes_style("whitegrid"):
+                fig, ax = plt.subplots(1, 1, figsize = figsize)
+                i = 0
+                for chave in self.__chaves:
+
+                    df = self.__dict_dfs_metricas[col_ref][chave]
+                    df_colunas = list(df.columns)
+                    if('Str' in df_colunas):
+                        valores = df['Str'].values
+                    elif('Categoria' in df_colunas):
+                        df = df.sort_values('Frac_1')
+                        if(explicita_resto):
+                            valores = df['Categoria'].values
+                        else:
+                            valores = np.where(df['Código'].values == 0, 'resto', df['Categoria'].values)
+                    elif('Valor' in df_colunas):
+                        valores = df['Valor'].values
+                    
+                    if(alga_signif is not None):
+                        str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                        valores = np.array([float(str_conv % v) for v in valores])
+                    if(unit is not None):
+                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                    if(conv_str):
+                        valores = valores.astype(str)
+                    if(ticks_chars is not None):
+                        valores = [re.sub("(.{" + str(ticks_chars) + "})", "\\1\n", v, 0, re.DOTALL) for v in valores]
+                    
+                    ax.plot(valores, df[metrica].values, '-o', color = paleta_cores[i], label = chave)
+                    i = i + 1
+                    
+                ax.set_xticks(valores)
+                if(rot is not None):
+                    ax.set_xticklabels(valores, rotation = rot)
+                    
+                if(ylim[1] > ylim[0]):
+                    ax.set_ylim(ylim)
+                ax.set_xlabel(col_ref)
+                ax.set_ylabel(metrica)
+
+                ax.legend(bbox_to_anchor = (1.05, 1), loc = 'upper left')
                 plt.show()
 
 ###########################################
@@ -727,7 +865,8 @@ class AvaliaRegressao:
         else:
             return df
     
-    def grafico_media_condicional(self, col_ref, ylim = [0, 0], explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
+    def grafico_media_condicional(self, col_ref, ylim = [0, 0], explicita_resto = False, rot = None, 
+                                  alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
         if(col_ref in self.__dict_soma_alvo.keys()):
             paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico
             
@@ -745,6 +884,11 @@ class AvaliaRegressao:
                 r2 = self.__dict_r2[col_ref]
                 razao_r2 = self.__dict_ratio_r2[col_ref]
                 
+                if(alga_signif is not None):
+                    str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                    valores = np.array([float(str_conv % v) for v in valores])
+                if(unit is not None):
+                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -766,7 +910,8 @@ class AvaliaRegressao:
                     plt.xticks(rotation = rot)
                 plt.show()
 
-    def grafico_metricas_condicionais(self, col_ref, metricas, ylim = [0, 0], explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
+    def grafico_metricas_condicionais(self, col_ref, metricas, ylim = [0, 0], explicita_resto = False, rot = None, 
+                                      alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
         if(col_ref in self.__dict_soma_alvo.keys()):
             paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico 
             #Plot a curva de métrica em função da coluna de referência
@@ -774,7 +919,12 @@ class AvaliaRegressao:
                 fig, axs = plt.subplots(1, 1, figsize = figsize)
                 
                 df, valores = self.valor_metricas_condicionais(col_ref, retorna_valores = True, explicita_resto = explicita_resto)
-                    
+                
+                if(alga_signif is not None):
+                    str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                    valores = np.array([float(str_conv % v) for v in valores])
+                if(unit is not None):
+                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]                
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -793,7 +943,8 @@ class AvaliaRegressao:
                     plt.xticks(rotation = rot)
                 plt.show()
                 
-    def barra_calor(self, col_ref, alpha_max = 1, sinal_cor = False, explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
+    def barra_calor(self, col_ref, alpha_max = 1, sinal_cor = False, explicita_resto = False, rot = None, 
+                    alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
         #Normaliza os valores para plotar em cor
         def normaliza_media(sinal_cor, media):
             minimo = np.min(media)
@@ -836,6 +987,11 @@ class AvaliaRegressao:
                 else:
                     media_pred = df['Media_Alvo'].values
                 
+                if(alga_signif is not None):
+                    str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                    valores = np.array([float(str_conv % v) for v in valores])
+                if(unit is not None):
+                    valores = [np.datetime_as_string(v, unit = unit) for v in valores]
                 if(conv_str):
                     valores = valores.astype(str)
                 if(ticks_chars is not None):
@@ -867,17 +1023,22 @@ class AvaliaDatasetsRegressao:
         self.__col_alvo = col_alvo
         self.__col_pred = col_pred
         
+        self.__num_kendalltau = num_kendalltau
+        
         self.__dict_avaliargs = {}
         if(self.__chave_treino in self.__chaves):
             avaliargs_treino = AvaliaRegressao(dict_dfs[chave_treino], col_alvo, col_pred, num_kendalltau = num_kendalltau, 
                                                num_div = num_div, num_cat = num_cat, unit = unit)
             #Pega o y_ref do treino
-            y_ref = avaliargs_treino.metricas_gerais.valor_media_alvo()
+            self.__y_ref = avaliargs_treino.metricas_gerais.valor_media_alvo()
             self.__dict_avaliargs[self.__chave_treino] = avaliargs_treino
         for chave in self.__chaves:
             if(chave != self.__chave_treino):
-                self.__dict_avaliargs[chave] = AvaliaRegressao(dict_dfs[chave], col_alvo, col_pred, y_ref, num_kendalltau, 
+                self.__dict_avaliargs[chave] = AvaliaRegressao(dict_dfs[chave], col_alvo, col_pred, self.__y_ref, num_kendalltau, 
                                                                num_div, num_cat, unit)
+                                                               
+        self.__distribuicoes_geral = DistribuicoesDataset(pd.concat(list(dict_dfs.values())), num_div = num_div, num_cat = num_cat, unit = unit, autorun = False)
+        self.__dict_dfs_metricas = {}
         
     def avaliadores_individuais(self):
         return self.__dict_avaliargs
@@ -885,6 +1046,54 @@ class AvaliaDatasetsRegressao:
     def calcula_metricas_condicionais(self, dict_dfs, col_ref = [], parametros_padrao = True, num_kendalltau = 10000, num_div = 20, num_cat = 5, unit = None):
         for chave in self.__chaves:
             self.__dict_avaliargs[chave].calcula_metricas_condicionais(dict_dfs[chave], col_ref, parametros_padrao, num_kendalltau, num_div, num_cat, unit)
+            
+        colunas = self.__dict_avaliargs[self.__chave_treino].distribuicoes.retorna_colunas_dataset()
+        #Transforma uma string única em uma lista
+        if(isinstance(col_ref, str)):
+            col_ref = [col_ref]
+        if(len(col_ref) != 0):
+            colunas = col_ref
+            
+        if(parametros_padrao):
+            num_kendalltau = self.__num_kendalltau
+            
+        for col_ref in colunas:
+            self.__distribuicoes_geral.trata_coluna(pd.concat(list(dict_dfs.values())), col_ref, parametros_padrao, num_div, num_cat, unit)
+            
+            dfs_metricas = {}
+            for chave in self.__chaves:
+                valores = self.__distribuicoes_geral.retorna_valores(dict_dfs[chave], col_ref)
+                flag_na = np.array(self.__dict_avaliargs[chave].distribuicoes.retorna_flag_na(col_ref))
+                num_linhas = self.__dict_avaliargs[chave].distribuicoes.retorna_shape_dataset()[0]
+                qtd_nao_nulo = num_linhas - self.__dict_avaliargs[chave].distribuicoes.retorna_qtds_na(col_ref)
+                
+                valores = valores[~flag_na]
+                y = dict_dfs[chave].loc[~flag_na, self.__col_alvo].values
+                
+                inds_ordenado, primeira_ocorrencia, qtds, qtd_unicos = indices_qtds(valores)
+                y_agrup = np.split(y[inds_ordenado], primeira_ocorrencia[1:])
+            
+                y_agrup = np.split(y[inds_ordenado], primeira_ocorrencia[1:])
+                soma = np.array([soma_vetor(v) for v in y_agrup])
+            
+                if(self.__col_pred is not None):
+                    y_pred = dict_dfs[chave].loc[~flag_na, self.__col_pred].values
+                    y_pred_agrup = np.split(y_pred[inds_ordenado], primeira_ocorrencia[1:])
+                    soma_pred = np.array([np.sum(v) for v in y_pred_agrup])
+                    metricas_vetor = np.array([AletricasRegressao(y_agrup[i], y_pred_agrup[i], 
+                                               y_ref = self.__y_ref, num_kendalltau = num_kendalltau) for i in range(qtd_unicos)])
+                                                              
+                df = self.__distribuicoes_geral.info_distribuicao(col_ref)
+                df['Soma_Alvo'] = soma
+                df['Media_Alvo'] = soma/qtds
+                if(self.__col_pred is not None):
+                    df['Soma_Pred'] = soma_pred
+                    df['Media_Pred'] = soma_pred/qtds
+                    df['Metricas'] = metricas_vetor
+                    df = pd.concat([df, df['Metricas'].apply(lambda x: x.valor_metricas(estatisticas_globais = False))], axis = 1)
+                    df = df.drop('Metricas', axis = 1)
+                dfs_metricas[chave] = df
+            self.__dict_dfs_metricas[col_ref] = dfs_metricas
     
     def valor_metricas(self, estatisticas_globais = True, metricas_ref = True, alga_signif = 0, conv_str = False):
         df = pd.DataFrame(self.__dict_avaliargs[self.__chave_treino].metricas_gerais.valor_metricas(estatisticas_globais, metricas_ref, alga_signif, conv_str), columns = [self.__chave_treino])
@@ -899,6 +1108,10 @@ class AvaliaDatasetsRegressao:
             for chave in self.__chaves:
                 d[chave] = self.__dict_avaliargs[chave].valor_metricas_condicionais(col_ref)
             return d
+            
+    def valor_metricas_condicionais_geral(self, col_ref):
+        if(col_ref in self.__dict_avaliargs[self.__chave_treino].colunas_metricas_condicionais_calculadas()):
+            return self.__dict_dfs_metricas[col_ref]
                 
     def grafico_distribuicao(self, col_ref = [], alpha = 0.5, bins = None, explicita_resto = False, rot = None, conv_str = False, ticks_chars = None, figsize = [6, 4]):
         colunas = self.__dict_avaliargs[self.__chave_treino].distribuicoes.retorna_colunas_dataset()
@@ -934,7 +1147,8 @@ class AvaliaDatasetsRegressao:
                         plt.xticks(rotation = rot)
                     plt.show()
                 
-    def grafico_media_condicional(self, col_ref, ylim = [0, 0], explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize_base = [6, 4]):
+    def grafico_media_condicional(self, col_ref, ylim = [0, 0], explicita_resto = False, rot = None, 
+                                  alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize_base = [6, 4]):
         if(col_ref in self.__dict_avaliargs[self.__chave_treino].colunas_metricas_condicionais_calculadas()):
             paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico
             #Plot a curva de probabilidade dada pelo Alvo e pela Prob do Classificador
@@ -961,6 +1175,11 @@ class AvaliaDatasetsRegressao:
                     else:
                         media_pred = None
                     
+                    if(alga_signif is not None):
+                        str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                        valores = np.array([float(str_conv % v) for v in valores])
+                    if(unit is not None):
+                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -991,7 +1210,8 @@ class AvaliaDatasetsRegressao:
                 plt.legend(handles = hlds, bbox_to_anchor = (1.05, 1), loc = 'upper left')
                 plt.show()
                 
-    def grafico_metricas_condicionais(self, col_ref, metricas, ylim = [0, 0], explicita_resto = False, rot = None, conv_str = True, ticks_chars = None, figsize_base = [6, 4]):
+    def grafico_metricas_condicionais(self, col_ref, metricas, ylim = [0, 0], explicita_resto = False, rot = None, 
+                                      alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize_base = [6, 4]):
         if(col_ref in self.__dict_avaliargs[self.__chave_treino].colunas_metricas_condicionais_calculadas()):
             paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico
             with sns.axes_style("whitegrid"):
@@ -1011,6 +1231,11 @@ class AvaliaDatasetsRegressao:
 
                     df, valores = self.__dict_avaliargs[chave].valor_metricas_condicionais(col_ref, retorna_valores = True, explicita_resto = explicita_resto)
                     
+                    if(alga_signif is not None):
+                        str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                        valores = np.array([float(str_conv % v) for v in valores])
+                    if(unit is not None):
+                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
                     if(conv_str):
                         valores = valores.astype(str)
                     if(ticks_chars is not None):
@@ -1037,4 +1262,51 @@ class AvaliaDatasetsRegressao:
                     ax.set_title(chave)
                     j = j + 1
                 plt.legend(handles = hlds, bbox_to_anchor = (1.05, 1), loc = 'upper left')
+                plt.show()
+                
+    def grafico_metrica_condicional_geral(self, col_ref, metrica, ylim = [0, 0], explicita_resto = False, rot = None, 
+                                          alga_signif = None, unit = None, conv_str = True, ticks_chars = None, figsize = [6, 4]):
+        if(col_ref in self.__dict_avaliargs[self.__chave_treino].colunas_metricas_condicionais_calculadas()):
+            paleta_cores = sns.color_palette("colorblind") #Paleta de cores para daltonico
+            with sns.axes_style("whitegrid"):
+                fig, ax = plt.subplots(1, 1, figsize = figsize)
+                i = 0
+                for chave in self.__chaves:
+
+                    df = self.__dict_dfs_metricas[col_ref][chave]
+                    df_colunas = list(df.columns)
+                    if('Str' in df_colunas):
+                        valores = df['Str'].values
+                    elif('Categoria' in df_colunas):
+                        df = df.sort_values('Media_Alvo')
+                        if(explicita_resto):
+                            valores = df['Categoria'].values
+                        else:
+                            valores = np.where(df['Código'].values == 0, 'resto', df['Categoria'].values)
+                    elif('Valor' in df_colunas):
+                        valores = df['Valor'].values
+                    
+                    if(alga_signif is not None):
+                        str_conv = ''.join(['%.', np.str(alga_signif), 'g'])
+                        valores = np.array([float(str_conv % v) for v in valores])
+                    if(unit is not None):
+                        valores = [np.datetime_as_string(v, unit = unit) for v in valores]
+                    if(conv_str):
+                        valores = valores.astype(str)
+                    if(ticks_chars is not None):
+                        valores = [re.sub("(.{" + str(ticks_chars) + "})", "\\1\n", v, 0, re.DOTALL) for v in valores]
+                    
+                    ax.plot(valores, df[metrica].values, '-o', color = paleta_cores[i], label = chave)
+                    i = i + 1
+                    
+                ax.set_xticks(valores)
+                if(rot is not None):
+                    ax.set_xticklabels(valores, rotation = rot)
+                    
+                if(ylim[1] > ylim[0]):
+                    ax.set_ylim(ylim)
+                ax.set_xlabel(col_ref)
+                ax.set_ylabel(metrica)
+
+                ax.legend(bbox_to_anchor = (1.05, 1), loc = 'upper left')
                 plt.show()

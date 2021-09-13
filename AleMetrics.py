@@ -90,6 +90,11 @@ class AletricasClassificacao:
         self.__acuracia_2d = None 
         self.__acuracia_balanceada_2d = None
         
+        self.__tvn = None
+        self.__tvp = None
+        self.__tvn_2d = None
+        self.__tvp_2d = None
+        
         self.__logloss_baseline = None
         self.__logloss = None
         self.__coef_logloss = None
@@ -311,23 +316,29 @@ class AletricasClassificacao:
     def __calcula_acuracia_balanceada(self, matriz):
         soma_0 = matriz[0, 0] + matriz[1, 0]
         soma_1 = matriz[0, 1] + matriz[1, 1]
-        if soma_0 > 0 and soma_1 > 0:
+        if soma_0 > 0:
             acuracia_0 = matriz[0, 0]/soma_0
+        else:
+            acuracia_0 = None
+        if soma_1 > 0:
             acuracia_1 = matriz[1, 1]/soma_1
+        else:
+            acuracia_1 = None
+        if soma_0 > 0 and soma_1 > 0:
             acuracia_bal = (acuracia_0 + acuracia_1)*0.5
         else:
-            acuracia_bal = np.nan
-        return acuracia_bal
+            acuracia_bal = None
+        return acuracia_bal, acuracia_0, acuracia_1
         
     def __calcula_logloss(self):
         self.__logloss = logloss(self.__y, self.__y_prob_inicial)
         if(self.__p_ref is None):
             self.__p_ref = media(self.__y)
-            self.__logloss_baseline = logloss(self.__y, self.__p_ref)
+            self.__logloss_baseline = logloss(self.__y, np.repeat(self.__p_ref, self.__y.size))
             self.__logloss_ref = self.__logloss_baseline
         else:
-            self.__logloss_baseline = logloss(self.__y, media(self.__y))
-            self.__logloss_ref = logloss(self.__y, self.__p_ref)
+            self.__logloss_baseline = logloss(self.__y, np.repeat(media(self.__y), self.__y.size))
+            self.__logloss_ref = logloss(self.__y, np.repeat(self.__p_ref, self.__y.size))
         self.__coef_logloss = 1 - self.__logloss/self.__logloss_baseline
         self.__coef_logloss_ref = 1 - self.__logloss/self.__logloss_ref
         
@@ -357,9 +368,9 @@ class AletricasClassificacao:
                 self.__p00, self.__p11 = self.__calcula_probabilidades_condicionais(self.matriz_confusao)
                 self.__p00_2d, self.__p11_2d = self.__calcula_probabilidades_condicionais(self.matriz_confusao_2d)
                 self.__acuracia = self.__calcula_acuracia(self.matriz_confusao)
-                self.__acuracia_balanceada = self.__calcula_acuracia_balanceada(self.matriz_confusao)
+                self.__acuracia_balanceada, self.__tvn, self.__tvp = self.__calcula_acuracia_balanceada(self.matriz_confusao)
                 self.__acuracia_2d = self.__calcula_acuracia(self.matriz_confusao_2d)
-                self.__acuracia_balanceada_2d = self.__calcula_acuracia_balanceada(self.matriz_confusao_2d)
+                self.__acuracia_balanceada_2d, self.__tvn_2d, self.__tvp_2d = self.__calcula_acuracia_balanceada(self.matriz_confusao_2d)
             elif(self.__y_prob_unico.size > 1):
                 self.__calcula_roc()
                 self.__calcula_ks()
@@ -374,7 +385,7 @@ class AletricasClassificacao:
                 self.matriz_confusao, _ = self.calcula_matriz_confusao(p0 = self.__p_corte, p1 = self.__p_corte)
                 self.__p00, self.__p11 = self.__calcula_probabilidades_condicionais(self.matriz_confusao)
                 self.__acuracia = self.__calcula_acuracia(self.matriz_confusao)
-                self.__acuracia_balanceada = self.__calcula_acuracia_balanceada(self.matriz_confusao)
+                self.__acuracia_balanceada, self.__tvn, self.__tvp = self.__calcula_acuracia_balanceada(self.matriz_confusao)
     
     def valor_prob_ig(self):
         #Retorna um pd.Series com as probs de corte encontradas no ganho de informação
@@ -436,8 +447,12 @@ class AletricasClassificacao:
             d.update(self.valor_prob_ig())
         d['Acurácia'] = self.__acuracia
         d['Acurácia_Balanceada'] = self.__acuracia_balanceada
+        d['TVN'] = self.__tvn
+        d['TVP'] = self.__tvp
         d['Acurácia_2D'] = self.__acuracia_2d
         d['Acurácia_Balanceada_2D'] = self.__acuracia_balanceada_2d
+        d['TVN_2D'] = self.__tvn_2d
+        d['TVP_2D'] = self.__tvp_2d
         if(self.__p00 != None and self.__p11 != None):
             d['Acurácia_Balanceada_Cond'] = (self.__p00 + self.__p11)*0.5
         else:
