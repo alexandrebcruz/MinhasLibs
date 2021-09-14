@@ -883,3 +883,181 @@ class AletricasRegressao:
                 except:
                     d[key] = np.nan
         return pd.Series(d, index = d.keys())
+        
+##############################
+
+##############################
+
+#Para funcionar direito, não pode haver nulos em y ou y_pred
+class AletricasDistribuicaoProbabilidade:
+    
+    def __init__(self, y, matriz_y_prob, vetor_y_minmax, y_ref = None):
+        self.__y = y
+        self.__matriz_y_prob = matriz_y_prob
+        self.__vetor_y_minmax = vetor_y_minmax
+        self.__y_ref = y_ref
+        
+        self.__qtd_tot = y.size
+        
+        vetor_y_meio = np.array([(v[0] + v[1])/2 for v in vetor_y_minmax])
+        vetor_y2_meio = np.array([(v[0]**2 + v[0]*v[1] + v[1]**2)/3 for v in vetor_y_minmax])
+        
+        y_pred_media = np.sum(matriz_y_prob*vetor_y_meio, axis = 1)
+        y2_pred_media = np.sum(matriz_y_prob*vetor_y2_meio, axis = 1)
+        
+        self.__soma_preds = soma_vetor(y_pred_media)
+        self.__soma_y = soma_vetor(y)
+       
+        self.__media_preds = self.__soma_preds/self.__qtd_tot
+        self.__media_y = self.__soma_y/self.__qtd_tot
+        
+        self.__diff_ym = diferenca_vetores(self.__y, self.__media_y)
+        if(y_ref == None):
+            self.__diff_yr = self.__diff_ym
+        else:
+            self.__diff_yr = diferenca_vetores(self.__y, self.__y_ref)
+        
+        #self.__diff_y = diferenca_vetores(self.__y, self.__y_pred)        
+        self.__diff_y2 = np.power(self.__y, 2) - 2*self.__y*y_pred_media + y2_pred_media
+        
+        self.__mae = None
+        self.__mse = None
+        self.__rmse = None
+        
+        self.__rae = None
+        self.__rse = None
+        self.__rrse = None
+     
+        self.__rae_ref = None
+        self.__rse_ref = None
+        self.__rrse_ref = None
+        
+        self.__r1 = None
+        self.__r2 = None
+        self.__rr2 = None
+        
+        self.__r1_ref = None
+        self.__r2_ref = None
+        self.__rr2_ref = None
+        
+        self.__calcula_metricas()
+    
+    def __calcula_mae(self):
+        self.__mae = np.nan
+        #self.__mae = calcula_mae(self.__diff_y)
+        
+    def __calcula_mse(self):
+        self.__mse = media(self.__diff_y2)
+        
+    def __calcula_rmse(self):
+        self.__rmse = math.sqrt(self.__mse)
+        
+    def __calcula_rae(self):
+        div = calcula_mae(self.__diff_ym)
+        if(div > 0):
+            self.__rae = self.__mae/div
+        else:
+            self.__rae = np.nan
+
+        div = calcula_mae(self.__diff_yr)
+        if(div > 0):
+            self.__rae_ref = self.__mae/div
+        else:
+            self.__rae_ref = np.nan
+            
+    def __calcula_rse(self):
+        div = calcula_mse(self.__diff_ym)
+        if(div > 0):
+            self.__rse = self.__mse/div
+        else:
+            self.__rse = np.nan
+
+        div = calcula_mse(self.__diff_yr)
+        if(div > 0):
+            self.__rse_ref = self.__mse/div
+        else:
+            self.__rse_ref = np.nan
+          
+    def __calcula_rrse(self):
+        if(np.isnan(self.__rse)):
+            self.__rrse = np.nan
+        else:
+            self.__rrse = math.sqrt(self.__rse)
+
+        if(np.isnan(self.__rse_ref)):
+            self.__rrse_ref = np.nan
+        else:
+            self.__rrse_ref = math.sqrt(self.__rse_ref)
+        
+    def __calcula_r1(self):
+        self.__r1 = np.nan
+        self.__r1_ref = np.nan
+        #self.__r1 = 1 - self.__rae
+        #self.__r1_ref = 1 - self.__rae_ref
+            
+    def __calcula_r2(self):
+        self.__r2 = 1 - self.__rse
+        self.__r2_ref = 1 - self.__rse_ref
+            
+    def __calcula_rr2(self):
+        self.__rr2 = 1 - self.__rrse
+        self.__rr2_ref = 1 - self.__rrse_ref
+
+    def __calcula_metricas(self):
+        if(self.__qtd_tot > 0):
+            #self.__calcula_mae()
+            self.__calcula_mse()
+            self.__calcula_rmse()
+            
+            #self.__calcula_rae()
+            self.__calcula_rse()
+            self.__calcula_rrse()
+            
+            #self.__calcula_r1()
+            self.__calcula_r2()
+            self.__calcula_rr2()
+    
+    def valor_media_alvo(self):
+        return self.__media_y
+    
+    def valor_metricas(self, estatisticas_globais = True, metricas_ref = True, alga_signif = 0, conv_str = False):
+        #Retorna um pd.Series com as metricas calculadas
+        #Esse formato é bom para criar dataframes
+        d = {}
+        if(estatisticas_globais):
+            d['QTD'] = self.__qtd_tot
+            d['Soma_Alvo'] = self.__soma_y
+            d['Soma_Pred'] = self.__soma_preds
+            d['Media_Alvo'] = self.__media_y
+            d['Media_Pred'] = self.__media_preds
+        d['MAE'] = self.__mae
+        d['MSE'] = self.__mse
+        d['RMSE'] = self.__rmse
+        d['RAE'] = self.__rae
+        d['RSE'] = self.__rse
+        d['RRSE'] = self.__rrse
+        if(metricas_ref):
+            d['RAE_ref'] = self.__rae_ref
+            d['RSE_ref'] = self.__rse_ref
+            d['RRSE_ref'] = self.__rrse_ref
+        d['R1'] = self.__r1
+        d['R2'] = self.__r2
+        d['RR2'] = self.__rr2
+        if(metricas_ref):
+            d['R1_ref'] = self.__r1_ref
+            d['R2_ref'] = self.__r2_ref
+            d['RR2_ref'] = self.__rr2_ref
+        if(alga_signif > 0):
+            str_conv = '%.' + str(alga_signif) + 'g'
+            for key in d.keys():
+                try:
+                    d[key] = float(str_conv % d[key])
+                except:
+                    d[key] = np.nan
+        if(conv_str):
+            for key in d.keys():
+                try:
+                    d[key] = str(d[key])
+                except:
+                    d[key] = np.nan
+        return pd.Series(d, index = d.keys())

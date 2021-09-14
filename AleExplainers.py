@@ -85,12 +85,12 @@ class CamClassificacao:
             cores_col = cores[np.floor((norm + 1)*(N-1)/2).astype(int)]
             cores_col = np.rint(255*cores_col).astype(int)
             if(opacity_text):
-                cores_col_hex = ['background-color: ' + '#{:02x}{:02x}{:02x}'.format(*cores_col[i,:3]) + '; opacity: ' + str(cores_col[i,3]/255) for i in range(0, cores_col.shape[0])]
+                cores_col_hex = ['background-color: ' + '#{:02x}{:02x}{:02x}'.format(*cores_col[i,:3]) + '; opacity: ' + str(cores_col[i,3]/255) + '; color: black' for i in range(0, cores_col.shape[0])]
             else:
-                #cores_col_hex = ['background-color: ' + '#{:02x}{:02x}{:02x}{:02x}'.format(*cores_col[i,:]) + '; opacity: 1.0' for i in range(0, cores_col.shape[0])] #Guarda a cor em hexadecimal (com o alpha)
-                cores_col_hex = ['background-color: ' + 'rgba({},{},{},'.format(*cores_col[i,:3]) + str(cores_col[i,3]/255) + ')' for i in range(0, cores_col.shape[0])]
+                #cores_col_hex = ['background-color: ' + '#{:02x}{:02x}{:02x}{:02x}'.format(*cores_col[i,:]) + '; opacity: 1.0' + '; color: black' for i in range(0, cores_col.shape[0])] #Guarda a cor em hexadecimal (com o alpha)
+                cores_col_hex = ['background-color: ' + 'rgba({},{},{},'.format(*cores_col[i,:3]) + str(cores_col[i,3]/255) + ')' + '; color: black' for i in range(0, cores_col.shape[0])]
             df_calor.loc[i, self.__features] = cores_col_hex
-        df_calor = df_calor.fillna('background-color: white')
+        df_calor = df_calor.fillna('background-color: white' + '; color: black')
         
         if(ordenar_linhas == 'ascending'):
             inds = np.array(pd.Series(np.arange(self.df_exp_varprob.shape[0]), index = self.df_exp_varprob.index)[df_exp.index])
@@ -128,8 +128,8 @@ class CamClassificacao:
         
         def apply_color(x):
             return df_calor
-        styles = [dict(selector="th", props=[("background-color", "white")]),
-                  dict(selector="tr", props=[("background-color", "white")])]
+        styles = [dict(selector="th", props=[("background-color", "white"), ("color", "black")]),
+                  dict(selector="tr", props=[("background-color", "white"), ("color", "black")])]
         styler = df_exp_plot.style.set_table_styles(styles).apply(apply_color, axis = None)
         return styler
 
@@ -210,12 +210,12 @@ class CamRegressao:
             cores_col = cores[np.floor((norm + 1)*(N-1)/2).astype(int)]
             cores_col = np.rint(255*cores_col).astype(int)
             if(opacity_text):
-                cores_col_hex = ['background-color: ' + '#{:02x}{:02x}{:02x}'.format(*cores_col[i,:3]) + '; opacity: ' + str(cores_col[i,3]/255) for i in range(0, cores_col.shape[0])]
+                cores_col_hex = ['background-color: ' + '#{:02x}{:02x}{:02x}'.format(*cores_col[i,:3]) + '; opacity: ' + str(cores_col[i,3]/255) + '; color: black' for i in range(0, cores_col.shape[0])]
             else:
-                #cores_col_hex = ['background-color: ' + '#{:02x}{:02x}{:02x}{:02x}'.format(*cores_col[i,:]) + '; opacity: 1.0' for i in range(0, cores_col.shape[0])] #Guarda a cor em hexadecimal (com o alpha)
-                cores_col_hex = ['background-color: ' + 'rgba({},{},{},'.format(*cores_col[i,:3]) + str(cores_col[i,3]/255) + ')' for i in range(0, cores_col.shape[0])]
+                #cores_col_hex = ['background-color: ' + '#{:02x}{:02x}{:02x}{:02x}'.format(*cores_col[i,:]) + '; opacity: 1.0' + '; color: black' for i in range(0, cores_col.shape[0])] #Guarda a cor em hexadecimal (com o alpha)
+                cores_col_hex = ['background-color: ' + 'rgba({},{},{},'.format(*cores_col[i,:3]) + str(cores_col[i,3]/255) + ')' + '; color: black' for i in range(0, cores_col.shape[0])]
             df_calor.loc[i, self.__features] = cores_col_hex
-        df_calor = df_calor.fillna('background-color: white')
+        df_calor = df_calor.fillna('background-color: white' + '; color: black')
         
         if(ordenar_linhas == 'ascending'):
             inds = np.array(pd.Series(np.arange(self.df_exp_varpred.shape[0]), index = self.df_exp_varpred.index)[df_exp.index])
@@ -253,8 +253,8 @@ class CamRegressao:
         
         def apply_color(x):
             return df_calor
-        styles = [dict(selector="th", props=[("background-color", "white")]),
-                  dict(selector="tr", props=[("background-color", "white")])]
+        styles = [dict(selector="th", props=[("background-color", "white"), ("color", "black")]),
+                  dict(selector="tr", props=[("background-color", "white"), ("color", "black")])]
         styler = df_exp_plot.style.set_table_styles(styles).apply(apply_color, axis = None)
         return styler
 
