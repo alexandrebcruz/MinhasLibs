@@ -1,5 +1,6 @@
 from numba import jit_module, jit, prange
 import numpy as np
+from scipy.stats import norm
 
 ######################################
 ##Operações Básicas
@@ -57,7 +58,7 @@ def normaliza_vetor_entropia(vetor_entropia, entropia_ini):
 def logloss(y, y_h):
     return -1*np.mean(np.where(y == 1, np.log(y_h), np.log(1 - y_h)))
     
-def media(y):
+def calcula_media(y):
     return np.mean(y)
 
 ######################################    
@@ -76,7 +77,33 @@ def checa_ordenacao(pares_indices, pares_valores, i):
     a = pares_valores[ind_a]
     b = pares_valores[ind_b]
     return (a[0] > a[1] and b[0] > b[1]) or (a[0] < a[1] and b[0] < b[1]) or (a[0] == a[1] and b[0] == b[1])
-    
+
+######################################    
+##Operações de Métricas de Distribuições de Probabilidade
+######################################
+
+def calcula_distribuicao_acumulada_pontos(y_pontos, y):
+    return np.array([np.sum(y_pontos <= v) for v in y])/y_pontos.size
+
+def calcula_ks(y_acum1, y_acum2):
+    return np.max(np.abs(y_acum1 - y_acum2))
+
+def calcula_desvio(vetor):
+    return np.std(vetor)
+
+def conta_prob_bin(inf_bin, sup_bin, valores_min, valores_max, probs):
+    prob_bin = 0
+    for i in prange(probs.size):
+        if(inf_bin <= valores_min[i] and sup_bin >= valores_max[i]):
+            prob_bin = prob_bin + probs[i]
+        elif(inf_bin <= valores_min[i] and sup_bin < valores_max[i] and sup_bin > valores_min[i]):
+            prob_bin = prob_bin + probs[i]*(sup_bin - valores_min[i])/(valores_max[i] - valores_min[i])
+        elif(inf_bin > valores_min[i] and sup_bin >= valores_max[i] and inf_bin < valores_max[i]):
+            prob_bin = prob_bin + probs[i]*(valores_max[i] - inf_bin)/(valores_max[i] - valores_min[i])
+        elif(inf_bin > valores_min[i] and sup_bin < valores_max[i]):
+            prob_bin = prob_bin + probs[i]*(sup_bin - inf_bin)/(valores_max[i] - valores_min[i])
+    return prob_bin
+
 ######################################
 ##Operações de Agrupamento e Ordenação
 ######################################
@@ -601,3 +628,18 @@ def multiplica_vetores(vetor1, vetor2):
 jit_module(nopython = True, 
            #cache = True
            )
+
+def calcula_distribuicao_acumulada(y_prob, discretizador, y):
+    vetor_y_minmax = discretizador.intervalos.pares_minimo_maximo_discretizacao()
+    vetor_y_min = np.array([v[0] for v in vetor_y_minmax])
+    vetor_y_max = np.array([v[1] for v in vetor_y_minmax])
+    y_disc = discretizador.intervalos.aplica_discretizacao(y).astype(int)
+    L = vetor_y_max - vetor_y_min
+    y_prob_acum = np.array([np.sum(y_prob[:y_disc[i]]) + y_prob[y_disc[i]]*(y[i] - vetor_y_min[y_disc[i]])/L[y_disc[i]] for i in range(y.size)])
+    return y_prob_acum
+
+def calcula_distribuicao_acumulada_normal(media, desvio, y):
+    return np.array([norm.cdf(v, loc = media, scale = desvio) for v in y])
+
+def calcula_distribuicao_acumulada_normal_condicional(media, desvio, qtds, qtd_unicos, y):
+    return np.array([np.sum([qtds[i]*norm.cdf(v, loc = media[i], scale = desvio[i]) for i in range(qtd_unicos)]) for v in y])/np.sum(qtds)

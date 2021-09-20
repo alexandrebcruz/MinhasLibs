@@ -1,3 +1,4 @@
+from numba.types.misc import DeferredType
 import numpy as np
 import pandas as pd
 
@@ -9,6 +10,7 @@ from functools import reduce
 import math
 
 from AleCFunctionsLearners import *
+from AleTransforms import *
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -111,6 +113,92 @@ class TaylorLaurentExpansion:
                 
     def calcula_termo(self, X, pos_termo):
         return calcula_termo_serie(X, self.__lista_termos[pos_termo])
+
+########################
+ 
+########################
+
+class DiscretizaAlvoRegressivo:
+
+    def __init__(self, y, num_div = 10):
+        self.intervalos = CortaIntervalosQuasiUniforme(y, num_div = num_div)
+
+        y_disc = self.intervalos.aplica_discretizacao(y)
+        inds_ordenado, primeira_ocorrencia, qtds, qtd_unicos = indices_qtds(y_disc)
+        y_agrup = np.split(y[inds_ordenado], primeira_ocorrencia[1:])
+
+        self.media = np.array([calcula_media(v) for v in y_agrup])
+        self.media2 = np.array([calcula_mse(v) for v in y_agrup])
+
+    def retorna_momentos(self):
+        return self.media, self.media2
+
+    def calcula_probabilidades(self, y):
+        y_disc = self.intervalos.aplica_discretizacao(y)
+        valores, qtds = np.unique(y_disc, return_counts = True)
+        vetor_probs = np.zeros(self.intervalos.valores_medios_discretizacao().size)
+        vetor_probs[valores.astype(int)] = qtds/y.size
+        return vetor_probs
+
+    def curva_probabilidade(self, probs):
+        if(len(probs.shape) == 2):
+            vetor_probs = np.sum(probs, axis = 0)/probs.shape[0]
+        else:
+            vetor_probs = probs
+        faixas = self.intervalos.strings_intervalos_discretizacao()
+        return faixas, vetor_probs
+
+    def curva_distribuicao_probabilidade(self, probs, bins = None):
+        if(len(probs.shape) == 2):
+            vetor_probs = np.sum(probs, axis = 0)/probs.shape[0]
+        else:
+            vetor_probs = probs
+        valores_min = np.array([v[0] for v in self.intervalos.pares_minimo_maximo_discretizacao()])
+        valores_max = np.array([v[1] for v in self.intervalos.pares_minimo_maximo_discretizacao()])
+        if(bins is None):
+            valores = np.array([x for y in self.intervalos.pares_minimo_maximo_discretizacao() for x in y])
+            fracL = np.repeat(vetor_probs/(valores_max - valores_min), 2)
+            return valores, fracL
+        else:
+            val_min = valores_min[0]
+            val_max = valores_max[-1]
+            L = (val_max - val_min)/bins
+            valores_corte_bins = [val_min + L*i for i in range(0, bins+1)]
+            valores_medios_bins = np.array([val_min + L*(i + 1/2) for i in range(1, bins+1)])
+            probs_bins = [conta_prob_bin(valores_corte_bins[i], valores_corte_bins[i+1], valores_min, valores_max, vetor_probs) for i in range(0, bins)]
+            return valores_medios_bins, probs_bins, L
+
+    def grafico_probabilidade(self, probs, rot = None, figsize = [6, 4]):
+        paleta_cores = sns.color_palette("colorblind")
+        with sns.axes_style("whitegrid"):
+            fig, ax = plt.subplots(1, 1, figsize = figsize)
+            valores, probs = self.curva_probabilidade(probs)
+            ax.bar(valores, probs, color = paleta_cores[0])
+            ax.set_ylabel('Probabilidade')
+            ax.set_xlabel('Valores')
+            ax.set_ylim(bottom = 0.0)
+            if(rot is not None):
+                plt.xticks(rotation = rot)
+            plt.show()
+
+    def grafico_distribuicao_probabilidade(self, probs, bins = None, alpha = 0.5, rot = None, figsize = [6, 4]):
+        paleta_cores = sns.color_palette("colorblind")
+        with sns.axes_style("whitegrid"):
+            fig, ax = plt.subplots(1, 1, figsize = figsize)
+            if(bins is None):
+                valores, fracL = self.curva_distribuicao_probabilidade(probs, bins = None)
+                ax.fill_between(valores, fracL, color = paleta_cores[0], alpha = alpha)
+                ax.plot(valores, fracL, color = paleta_cores[0])
+                ax.set_ylabel('Prob./L')
+            else:
+                valores, frac, largura = self.curva_distribuicao_probabilidade(probs, bins = bins)
+                ax.bar(valores, frac, color = paleta_cores[0], alpha = alpha, width = largura, linewidth = 2, edgecolor = paleta_cores[0])
+                ax.set_ylabel('Probabilidade')
+            ax.set_xlabel('Valores')
+            ax.set_ylim(bottom = 0.0)
+            if(rot is not None):
+                plt.xticks(rotation = rot)
+            plt.show()
 
  ########################
  
@@ -459,7 +547,7 @@ class SeriesMultiGradientRegressor:
                     axs.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
                 plt.show()
             if(verbose >= 2):
-                print(' / '.join(r2_temp.astype(str)) + " (" + str(self.__num_passos) + ")")
+                print(' / '.join(self.__r2_temp.astype(str)) + " (" + str(self.__num_passos) + ")")
             if(verbose >= 1):
                 print("Número de Parâmetros sendo Atualizados: " + str(self.__num_params_atuali) + " (" + str(self.__num_passos) + ")")
         

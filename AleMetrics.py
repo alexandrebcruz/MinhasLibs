@@ -333,11 +333,11 @@ class AletricasClassificacao:
     def __calcula_logloss(self):
         self.__logloss = logloss(self.__y, self.__y_prob_inicial)
         if(self.__p_ref is None):
-            self.__p_ref = media(self.__y)
+            self.__p_ref = calcula_media(self.__y)
             self.__logloss_baseline = logloss(self.__y, np.repeat(self.__p_ref, self.__y.size))
             self.__logloss_ref = self.__logloss_baseline
         else:
-            self.__logloss_baseline = logloss(self.__y, np.repeat(media(self.__y), self.__y.size))
+            self.__logloss_baseline = logloss(self.__y, np.repeat(calcula_media(self.__y), self.__y.size))
             self.__logloss_ref = logloss(self.__y, np.repeat(self.__p_ref, self.__y.size))
         self.__coef_logloss = 1 - self.__logloss/self.__logloss_baseline
         self.__coef_logloss_ref = 1 - self.__logloss/self.__logloss_ref
@@ -696,7 +696,7 @@ class AletricasClassificacao:
 #Para funcionar direito, não pode haver nulos em y ou y_pred
 class AletricasRegressao:
     
-    def __init__(self, y, y_pred, y_ref = None, num_kendalltau = 10000):
+    def __init__(self, y, y_pred, y_ref = None, y2_ref = None, num_kendalltau = 10000):
         self.__y = y
         self.__y_pred = y_pred
         self.__y_ref = y_ref
@@ -710,9 +710,11 @@ class AletricasRegressao:
         self.__media_preds = self.__soma_preds/self.__qtd_tot
         self.__media_y = self.__soma_y/self.__qtd_tot
         
+        self.__media_y2 = calcula_mse(y)
+        
         self.__diff_y = diferenca_vetores(self.__y, self.__y_pred)
         self.__diff_ym = diferenca_vetores(self.__y, self.__media_y)
-        if(y_ref == None):
+        if(y_ref is None):
             self.__diff_yr = self.__diff_ym
         else:
             self.__diff_yr = diferenca_vetores(self.__y, self.__y_ref)
@@ -742,6 +744,24 @@ class AletricasRegressao:
         self.__kendalltau = None
         
         self.__calcula_metricas()
+        
+        ### Métricas de Distribuição ###
+
+        self.__y_unicos = np.unique(y)
+        self.__y_acum = calcula_distribuicao_acumulada_pontos(y, self.__y_unicos)
+        y_acum_ref = calcula_distribuicao_acumulada_normal(self.__media_y, np.std(y), self.__y_unicos)
+        self.__y_pred_acum = calcula_distribuicao_acumulada_pontos(y_pred, self.__y_unicos)
+        
+        self.__ks = calcula_ks(self.__y_acum, self.__y_pred_acum)
+        ks_ref = calcula_ks(self.__y_acum, y_acum_ref)
+        self.__coef_ks = 1 - self.__ks/ks_ref
+        
+        if(y_ref is None or y2_ref is None):
+            self.__coef_ks_ref = self.__coef_ks
+        else:
+            y_acum_ref = calcula_distribuicao_acumulada_normal(y_ref, math.sqrt(y2_ref - math.pow(y_ref, 2)), self.__y_unicos)
+            ks_ref = calcula_ks(self.__y_acum, y_acum_ref)
+            self.__coef_ks_ref = 1 - self.__ks/ks_ref
     
     def __calcula_mae(self):
         self.__mae = calcula_mae(self.__diff_y)
@@ -836,8 +856,24 @@ class AletricasRegressao:
             if(self.__qtd_tot > 1 and self.__num_kendalltau > 0):
                 self.__calcula_kendalltau()
     
-    def valor_media_alvo(self):
-        return self.__media_y
+    def valor_medias_alvo(self):
+        return self.__media_y, self.__media_y2
+    
+    def curva_distribuicao_acumulada(self):
+        return self.__y_unicos, self.__y_acum, self.__y_pred_acum, self.__ks
+    
+    def grafico_distribuicao_acumulada(self, figsize = [6, 4]): 
+        paleta_cores = sns.color_palette("colorblind")
+        with sns.axes_style("whitegrid"):
+            fig, axs = plt.subplots(1, 1, figsize = figsize)
+            y_unicos, y_acum, y_pred_acum, ks = self.curva_distribuicao_acumulada()
+            axs.plot(y_unicos, y_acum, color = paleta_cores[0], alpha = 1.0, label = 'Real')
+            axs.plot(y_unicos, y_pred_acum, color = paleta_cores[1], alpha = 1.0, label = 'Predito')
+            plt.gcf().text(1, 0.5, 'KS = ' + '%.2g' % ks, bbox = dict(facecolor = 'white', edgecolor = 'k', boxstyle = 'round'))
+            axs.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            axs.set_xlabel('Valores')
+            axs.set_ylabel('Probabilidade Acumulada')
+            plt.show()
     
     def valor_metricas(self, estatisticas_globais = True, metricas_ref = True, alga_signif = 0, conv_str = False):
         #Retorna um pd.Series com as metricas calculadas
@@ -869,6 +905,9 @@ class AletricasRegressao:
         d['KendallTau_Conc'] = self.__kendalltau_conc
         d['KendallTau_Disc'] = self.__kendalltau_disc
         d['KendallTau'] = self.__kendalltau
+        d['KS'] = self.__ks
+        d['Coef_KS'] = self.__coef_ks
+        d['Coef_KS_ref'] = self.__coef_ks_ref
         if(alga_signif > 0):
             str_conv = '%.' + str(alga_signif) + 'g'
             for key in d.keys():
@@ -891,134 +930,57 @@ class AletricasRegressao:
 #Para funcionar direito, não pode haver nulos em y ou y_pred
 class AletricasDistribuicaoProbabilidade:
     
-    def __init__(self, y, matriz_y_prob, vetor_y_minmax, y_ref = None):
+    def __init__(self, y, matriz_y_prob, discretizador, y_ref = None, y2_ref = None):
         self.__y = y
-        self.__matriz_y_prob = matriz_y_prob
-        self.__vetor_y_minmax = vetor_y_minmax
+        self.__discretizador = discretizador
         self.__y_ref = y_ref
-        
+        self.__y2_ref = y2_ref
         self.__qtd_tot = y.size
-        
-        vetor_y_meio = np.array([(v[0] + v[1])/2 for v in vetor_y_minmax])
-        vetor_y2_meio = np.array([(v[0]**2 + v[0]*v[1] + v[1]**2)/3 for v in vetor_y_minmax])
-        
-        y_pred_media = np.sum(matriz_y_prob*vetor_y_meio, axis = 1)
-        y2_pred_media = np.sum(matriz_y_prob*vetor_y2_meio, axis = 1)
-        
-        self.__soma_preds = soma_vetor(y_pred_media)
+        self.__y_prob = np.sum(matriz_y_prob, axis = 0)/self.__qtd_tot
+
         self.__soma_y = soma_vetor(y)
-       
-        self.__media_preds = self.__soma_preds/self.__qtd_tot
         self.__media_y = self.__soma_y/self.__qtd_tot
+        self.__media_y2 = calcula_mse(y)
         
-        self.__diff_ym = diferenca_vetores(self.__y, self.__media_y)
-        if(y_ref == None):
-            self.__diff_yr = self.__diff_ym
+        self.__media_preds = np.sum(self.__y_prob*self.__discretizador.media)
+        self.__soma_preds = self.__media_preds*self.__qtd_tot
+        
+        ### Métricas de Distribuição ###
+
+        self.__y_unicos = np.unique(y)
+        self.__y_acum = calcula_distribuicao_acumulada_pontos(y, self.__y_unicos)
+        y_acum_ref = calcula_distribuicao_acumulada_normal(self.__media_y, np.std(y), self.__y_unicos)
+        self.__y_pred_acum = calcula_distribuicao_acumulada(self.__y_prob, self.__discretizador, self.__y_unicos)
+        
+        self.__ks = calcula_ks(self.__y_acum, self.__y_pred_acum)
+        ks_ref = calcula_ks(self.__y_acum, y_acum_ref)
+        self.__coef_ks = 1 - self.__ks/ks_ref
+        
+        if(y_ref is None or y2_ref is None):
+            self.__coef_ks_ref = self.__coef_ks
         else:
-            self.__diff_yr = diferenca_vetores(self.__y, self.__y_ref)
-        
-        #self.__diff_y = diferenca_vetores(self.__y, self.__y_pred)        
-        self.__diff_y2 = np.power(self.__y, 2) - 2*self.__y*y_pred_media + y2_pred_media
-        
-        self.__mae = None
-        self.__mse = None
-        self.__rmse = None
-        
-        self.__rae = None
-        self.__rse = None
-        self.__rrse = None
-     
-        self.__rae_ref = None
-        self.__rse_ref = None
-        self.__rrse_ref = None
-        
-        self.__r1 = None
-        self.__r2 = None
-        self.__rr2 = None
-        
-        self.__r1_ref = None
-        self.__r2_ref = None
-        self.__rr2_ref = None
-        
-        self.__calcula_metricas()
+            y_acum_ref = calcula_distribuicao_acumulada_normal(y_ref, math.sqrt(y2_ref - math.pow(y_ref, 2)), self.__y_unicos)
+            ks_ref = calcula_ks(self.__y_acum, y_acum_ref)
+            self.__coef_ks_ref = 1 - self.__ks/ks_ref
     
-    def __calcula_mae(self):
-        self.__mae = np.nan
-        #self.__mae = calcula_mae(self.__diff_y)
-        
-    def __calcula_mse(self):
-        self.__mse = media(self.__diff_y2)
-        
-    def __calcula_rmse(self):
-        self.__rmse = math.sqrt(self.__mse)
-        
-    def __calcula_rae(self):
-        div = calcula_mae(self.__diff_ym)
-        if(div > 0):
-            self.__rae = self.__mae/div
-        else:
-            self.__rae = np.nan
-
-        div = calcula_mae(self.__diff_yr)
-        if(div > 0):
-            self.__rae_ref = self.__mae/div
-        else:
-            self.__rae_ref = np.nan
-            
-    def __calcula_rse(self):
-        div = calcula_mse(self.__diff_ym)
-        if(div > 0):
-            self.__rse = self.__mse/div
-        else:
-            self.__rse = np.nan
-
-        div = calcula_mse(self.__diff_yr)
-        if(div > 0):
-            self.__rse_ref = self.__mse/div
-        else:
-            self.__rse_ref = np.nan
-          
-    def __calcula_rrse(self):
-        if(np.isnan(self.__rse)):
-            self.__rrse = np.nan
-        else:
-            self.__rrse = math.sqrt(self.__rse)
-
-        if(np.isnan(self.__rse_ref)):
-            self.__rrse_ref = np.nan
-        else:
-            self.__rrse_ref = math.sqrt(self.__rse_ref)
-        
-    def __calcula_r1(self):
-        self.__r1 = np.nan
-        self.__r1_ref = np.nan
-        #self.__r1 = 1 - self.__rae
-        #self.__r1_ref = 1 - self.__rae_ref
-            
-    def __calcula_r2(self):
-        self.__r2 = 1 - self.__rse
-        self.__r2_ref = 1 - self.__rse_ref
-            
-    def __calcula_rr2(self):
-        self.__rr2 = 1 - self.__rrse
-        self.__rr2_ref = 1 - self.__rrse_ref
-
-    def __calcula_metricas(self):
-        if(self.__qtd_tot > 0):
-            #self.__calcula_mae()
-            self.__calcula_mse()
-            self.__calcula_rmse()
-            
-            #self.__calcula_rae()
-            self.__calcula_rse()
-            self.__calcula_rrse()
-            
-            #self.__calcula_r1()
-            self.__calcula_r2()
-            self.__calcula_rr2()
+    def valor_medias_alvo(self):
+        return self.__media_y, self.__media_y2
     
-    def valor_media_alvo(self):
-        return self.__media_y
+    def curva_distribuicao_acumulada(self):
+        return self.__y_unicos, self.__y_acum, self.__y_pred_acum, self.__ks
+    
+    def grafico_distribuicao_acumulada(self, figsize = [6, 4]): 
+        paleta_cores = sns.color_palette("colorblind")
+        with sns.axes_style("whitegrid"):
+            fig, axs = plt.subplots(1, 1, figsize = figsize)
+            y_unicos, y_acum, y_pred_acum, ks = self.curva_distribuicao_acumulada()
+            axs.plot(y_unicos, y_acum, color = paleta_cores[0], alpha = 1.0, label = 'Real')
+            axs.plot(y_unicos, y_pred_acum, color = paleta_cores[1], alpha = 1.0, label = 'Predito')
+            plt.gcf().text(1, 0.5, 'KS = ' + '%.2g' % ks, bbox = dict(facecolor = 'white', edgecolor = 'k', boxstyle = 'round'))
+            axs.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            axs.set_xlabel('Valores')
+            axs.set_ylabel('Probabilidade Acumulada')
+            plt.show()
     
     def valor_metricas(self, estatisticas_globais = True, metricas_ref = True, alga_signif = 0, conv_str = False):
         #Retorna um pd.Series com as metricas calculadas
@@ -1030,23 +992,9 @@ class AletricasDistribuicaoProbabilidade:
             d['Soma_Pred'] = self.__soma_preds
             d['Media_Alvo'] = self.__media_y
             d['Media_Pred'] = self.__media_preds
-        d['MAE'] = self.__mae
-        d['MSE'] = self.__mse
-        d['RMSE'] = self.__rmse
-        d['RAE'] = self.__rae
-        d['RSE'] = self.__rse
-        d['RRSE'] = self.__rrse
-        if(metricas_ref):
-            d['RAE_ref'] = self.__rae_ref
-            d['RSE_ref'] = self.__rse_ref
-            d['RRSE_ref'] = self.__rrse_ref
-        d['R1'] = self.__r1
-        d['R2'] = self.__r2
-        d['RR2'] = self.__rr2
-        if(metricas_ref):
-            d['R1_ref'] = self.__r1_ref
-            d['R2_ref'] = self.__r2_ref
-            d['RR2_ref'] = self.__rr2_ref
+        d['KS'] = self.__ks
+        d['Coef_KS'] = self.__coef_ks
+        d['Coef_KS_ref'] = self.__coef_ks_ref
         if(alga_signif > 0):
             str_conv = '%.' + str(alga_signif) + 'g'
             for key in d.keys():
