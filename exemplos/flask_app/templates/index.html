@@ -1,0 +1,61 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            table {
+                border-collapse: collapse;
+                border: 2px black solid;
+                font: 12px sans-serif;
+            }
+
+            td {
+                border: 1px black solid;
+                padding: 5px;
+            }
+        </style>
+    </head>
+	<body>
+		<!-- <script src="{{ url_for('static', filename='js/d3.js') }}"></script> -->
+
+        <div>
+            <form action="/filtros/" method="post">
+                    Embarked: <select id='input_selecao'>
+                    <option value = "none">Geral</option>
+                    <option value = "S">S</option>
+                    <option value = "C">C</option>
+                    </select><br><br>
+                    Ticket: <input type="text" id="input_texto" placeholder="Busca por ticket"><br><br>
+                    <button name="botaoAnterior" type="submit">Buscar</button>
+            </form>
+        </div>
+        
+        <br>
+        <div>============================</div>
+        <br>
+
+        <div>
+            <div style="float:left;"><form action="/train/1"><button type="submit">Train</button></form></div>
+            <div style="float:left;"><form action="/test/1"><button type="submit">Test</button></form></div>
+        </div>
+
+        <br><br>
+
+        <div>
+            <div>Nome da Tabela: {{ nome_tabela }}</div>
+        </div>
+        <br>
+
+        <div>
+            {{ tabela|safe }}
+        </div>
+        <br>
+    
+        <div>
+            <div>Página: {{ pag }} / {{ tot_pags }}</div>
+            <div style="float:left;"><form action="/anterior/{{ nome_tabela }}/{{ pag }}" method="post"><button name="botaoAnterior" type="submit"><<</button></form></div>
+            <div style="float:left;"><form action="/proximo/{{ nome_tabela }}/{{ pag }}" method="post"><button name="botaoProximo" type="submit">>></button></form></div>
+        </div>
+	</body>
+
+
+</html>
