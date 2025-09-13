@@ -1,0 +1,83 @@
+import mlflow
+import mlflow.pyfunc
+import pandas as pd
+from catboost import CatBoostClassifier
+import json, io
+
+# Liste as colunas de features e salve junto (ordem importaaaa!)
+feature_cols = [...]  # ex.: ["f1","f2","f3", ...]
+with open("/dbfs/models/catboost/feature_cols.json", "w") as f:
+    json.dump(feature_cols, f)
+
+class CatBoostPyfunc(mlflow.pyfunc.PythonModel):
+    def load_context(self, context):
+        # carrega nomes das features
+        import json, os
+        with open(context.artifacts["feature_cols"], "r") as f:
+            self.feature_cols = json.load(f)
+        # carrega o .cbm
+        from catboost import CatBoostClassifier
+        self.model = CatBoostClassifier()
+        self.model.load_model(context.artifacts["cbm_path"])
+
+    def predict(self, context, model_input):
+        # model_input é um pandas.DataFrame vindo do Spark UDF
+        X = model_input[self.feature_cols]
+        # retorna prob da classe positiva
+        return pd.Series(self.model.predict_proba(X)[:, 1])
+
+def log_cbm_as_pyfunc(name, cbm_path):
+    with mlflow.start_run(run_name=f"{name}"):
+        mlflow.pyfunc.log_model(
+            artifact_path=name,
+            python_model=CatBoostPyfunc(),
+            artifacts={
+                "cbm_path": cbm_path,  # caminho local/DBFS do .cbm
+                "feature_cols": "/dbfs/models/catboost/feature_cols.json",
+            },
+            registered_model_name=name  # (opcional) registrar no registry
+        )
+        run = mlflow.active_run()
+    return f"runs:/{run.info.run_id}/{name}"
+
+# Exemplo: registrar 3 modelos salvos previamente
+uri1 = log_cbm_as_pyfunc("cb_model_1", "/dbfs/models/cb/mdl1.cbm")
+uri2 = log_cbm_as_pyfunc("cb_model_2", "/dbfs/models/cb/mdl2.cbm")
+uri3 = log_cbm_as_pyfunc("cb_model_3", "/dbfs/models/cb/mdl3.cbm")
+uris = [uri1, uri2, uri3]
+
+##########################################
+
+from pyspark.sql import functions as F
+from pyspark.sql.types import DoubleType
+import mlflow.pyfunc
+
+# Carrega base de scoring (qualquer DF com as colunas feature_cols)
+sdf = spark.read.table("schema.tabela_scoring")
+
+# Cria um UDF por modelo
+udfs = [mlflow.pyfunc.spark_udf(spark, uri, result_type=DoubleType()) for uri in uris]
+
+# Aplica cada UDF passando as colunas de features na MESMA ORDEM
+scores_cols = [
+    udf(*[F.col(c) for c in feature_cols]).alias(f"score_{i+1}")
+    for i, udf in enumerate(udfs)
+]
+
+tmp = sdf.select("*", *scores_cols)
+
+# Média simples (ou ponderada se quiser)
+n = len(udfs)
+scored = tmp.withColumn("score", sum(F.col(f"score_{i+1}") for i in range(n)) / F.lit(n))
+
+# (Opcional) média ponderada:
+# pesos = [0.5, 0.3, 0.2]
+# scored = tmp.withColumn("score",
+#     sum(F.lit(pesos[i]) * F.col(f"score_{i+1}") for i in range(n)) / F.lit(sum(pesos))
+# )
+
+# Salvar resultados
+(scored
+ .select("*", "score")
+ .write.mode("overwrite")
+ .saveAsTable("schema.resultado_scoring_ensemble_v1"))

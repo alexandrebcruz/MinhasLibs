@@ -1,0 +1,83 @@
+import mlflow, mlflow.pyfunc, json
+from catboost import CatBoostClassifier
+import pandas as pd
+import numpy as np
+
+feature_cols = [...]                 # MESMA ORDEM do treino
+class_names  = ["A","B","C"]         # ou list(le.classes_) se usou LabelEncoder
+
+# Persistir metadados
+with open("/dbfs/models/catboost/feature_cols.json", "w") as f:
+    json.dump(feature_cols, f)
+with open("/dbfs/models/catboost/class_names.json", "w") as f:
+    json.dump(class_names, f)
+
+class CatBoostPyfuncMC(mlflow.pyfunc.PythonModel):
+    def load_context(self, context):
+        from catboost import CatBoostClassifier
+        import json
+        self.feature_cols = json.load(open(context.artifacts["feature_cols"], "r"))
+        self.class_names  = json.load(open(context.artifacts["class_names"], "r"))
+        self.model = CatBoostClassifier()
+        self.model.load_model(context.artifacts["cbm_path"])
+
+    def predict(self, context, model_input: pd.DataFrame):
+        X = model_input[self.feature_cols]
+        # Matriz (n_amostras, n_classes)
+        probs = self.model.predict_proba(X)
+        # retorna como lista de listas (Spark UDF com ArrayType)
+        return pd.Series(list(map(list, probs)))
+
+def log_cbm_as_pyfunc(name, cbm_path):
+    with mlflow.start_run(run_name=name):
+        mlflow.pyfunc.log_model(
+            artifact_path=name,
+            python_model=CatBoostPyfuncMC(),
+            artifacts={
+                "cbm_path": cbm_path,
+                "feature_cols": "/dbfs/models/catboost/feature_cols.json",
+                "class_names": "/dbfs/models/catboost/class_names.json",
+            },
+            registered_model_name=name  # opcional
+        )
+        run = mlflow.active_run()
+        return f"runs:/{run.info.run_id}/{name}"
+
+# Exemplo: registrar 1+ modelos
+uri1 = log_cbm_as_pyfunc("cb_mc_1", "/dbfs/models/cb_mc/mdl1.cbm")
+# (para ensemble, registre outros: uri2, uri3, ...)
+
+#########################################
+
+from pyspark.sql import functions as F
+from pyspark.sql.types import ArrayType, DoubleType
+import mlflow.pyfunc, json
+
+# Carregar nomes de classes para “espalhar” depois (útil para nomear colunas)
+class_names = json.load(open("/dbfs/models/catboost/class_names.json", "r"))
+
+# Base de scoring
+sdf = spark.read.table("schema.tabela_scoring")
+
+# UDF que devolve Array[Double] com probs por classe
+udf_mc = mlflow.pyfunc.spark_udf(spark, uri1, result_type=ArrayType(DoubleType()))
+
+# Aplicar (passando as colunas na MESMA ORDEM do treino)
+scored = sdf.withColumn("probs", udf_mc(*[F.col(c) for c in feature_cols]))
+
+# (Opcional) explodir em colunas nomeadas por classe
+for i, cname in enumerate(class_names):
+    scored = scored.withColumn(f"p_{cname}", F.col("probs")[i])
+
+# Classe predita = argmax
+scored = scored.withColumn("pred_class_idx",
+                           F.expr(f"array_position(probs, array_max(probs)) - 1"))
+# Se quiser mapear índice → nome da classe:
+mapping = F.create_map([F.lit(i) for kv in sum([[i, cname] for i, cname in enumerate(class_names)], [])])
+scored = scored.withColumn("pred_class", mapping[F.col("pred_class_idx")])
+
+# Salvar
+(scored
+ .select("*", "probs", *[f"p_{c}" for c in class_names], "pred_class")
+ .write.mode("overwrite")
+ .saveAsTable("schema.resultado_scoring_mc_v1"))
