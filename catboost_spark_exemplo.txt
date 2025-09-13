@@ -1,0 +1,64 @@
+from pyspark.sql import functions as F
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.linalg import VectorUDT
+from pyspark.sql.types import StringType
+import catboost_spark
+
+# -------- Parâmetros que você já tem --------
+label_col = "meu_alvo"  # <- nome da sua coluna alvo
+feature_cols = ["f1","f2","f3"]  # <- sua lista Python com as colunas de features
+
+# Ex.: lendo a tabela já salva (você disse que já usa spark.sql)
+df = spark.sql("SELECT * FROM meu_banco.minha_tabela")
+
+# -------- Checagens rápidas de sanidade --------
+# 1) Verifica se as features existem na tabela
+cols_set = set(df.columns)
+missing = [c for c in feature_cols if c not in cols_set]
+if missing:
+    raise ValueError(f"As seguintes features não existem na tabela: {missing}")
+
+# 2) Evita que a coluna alvo esteja por engano na lista de features
+feature_cols = [c for c in feature_cols if c != label_col]
+
+# -------- Monta vetor de features e label --------
+assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+df_feat = assembler.transform(df)
+
+# CatBoost Spark aceita label como string para classificação binária/multiclasse
+df_ready = (
+    df_feat
+    .withColumn("label", F.col(label_col).cast(StringType()))
+    .select("features", "label")
+    .cache()
+)
+
+# -------- Split train / eval --------
+trainDf, evalDf = df_ready.randomSplit([0.8, 0.2], seed=42)
+
+# -------- Pools CatBoost --------
+trainPool = catboost_spark.Pool(trainDf)
+evalPool  = catboost_spark.Pool(evalDf)
+
+# -------- Modelo CatBoost com early stopping --------
+# Observação: nomes de parâmetros no catboost_spark seguem o estilo abaixo.
+# (Se sua versão diferir, ajuste nomes como 'lossFunction' -> 'loss_function', etc.)
+clf = catboost_spark.CatBoostClassifier(
+    iterations=2000,
+    learningRate=0.05,
+    depth=6,
+    lossFunction="Logloss",
+    evalMetric="AUC",
+    earlyStoppingRounds=100,  # para early stopping com base no eval
+    # borderCount=254,  # opcional: discretização de features contínuas
+    # classWeights=[1.0, 3.0],  # opcional: para desbalanceamento
+)
+
+# Em versões recentes, você pode passar eval set assim:
+model = clf.fit(trainPool, evalSet=evalPool)
+# (Se sua versão pedir outra assinatura, use por ex.: clf.fit(trainPool, [evalPool])
+#  ou clf.fit(trainPool, evalSets=[("eval", evalPool)]) )
+
+# -------- Predizer no conjunto de avaliação --------
+pred = model.transform(evalDf)
+pred.select("features", "label", "probability", "prediction").show(truncate=False)
